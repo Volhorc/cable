@@ -5,6 +5,7 @@ authors = ["Volhorc <69816212+Ocrrcc@users.noreply.github.com>"]
 edition = "2018"
 description = "A pointer type for heap allocation that represents a block of memory. Stores a user specified header(`H`) at address, followed by the size of the allocation and finally, a resizable array of `T`."
 repository = "https://github.com/Volhorc/cable"
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
