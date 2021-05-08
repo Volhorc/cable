@@ -3,7 +3,7 @@ name = "cable"
 version = "0.1.0"
 authors = ["Volhorc <69816212+Ocrrcc@users.noreply.github.com>"]
 edition = "2018"
-description = "A pointer type for heap allocation, with a header and size stashed at address"
+description = "A cable(pointer) with a hook(header at address) at the end and a sized payload(array)"
 repository = "https://github.com/Volhorc/cable"
 license = "MIT OR Apache-2.0"
 

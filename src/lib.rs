@@ -14,7 +14,6 @@ use std::slice;
 /// Adds padding where necessary.
 ///
 /// # Examples
-///
 /// ```
 /// let mut data: Cable<f64, (i32, i32, i32, i32)> = Cable::with_capacity_zeroed(8, (1, 2, 3, 4));
 /// data[0] = 1.0;
