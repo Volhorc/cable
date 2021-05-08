@@ -13,7 +13,7 @@ A pointer type for heap allocation, with some special features:
 Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
-cable = "0.1.0"
+cable = "0.1.1"
 ```
 ## Examples
 ```rust
