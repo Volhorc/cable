@@ -216,14 +216,21 @@ impl<T, H> Cable<T, H> {
         return block;
     }
 
-    /// Fills the storage with `0` bytes. Does not impact header or size
-    #[inline]
-    pub fn zero(&mut self) {
-        // SAFE(within bounds)
-        unsafe {
-            self.as_mut_ptr()
-                .write_bytes(0, mem::size_of::<T>() * self.cap());
-        }
+    pub fn from_slice(slice: &[T]) -> Self {
+        let mut block = Cable {
+            mem: {
+                let layout = Self::BASE_LAYOUT
+                    .extend(Layout::array::<T>(slice.len()).unwrap())
+                    .unwrap()
+                    .0;
+                NonNull::new(unsafe { std::alloc::alloc(layout) as *mut H })
+                    .expect("allocation failed")
+            },
+            phantom: PhantomData,
+        };
+        unsafe { ptr::copy_nonoverlapping(slice.as_ptr(), block.as_mut_ptr(), slice.len()) }
+        block.set_cap(slice.len());
+        return block;
     }
 
     /// Constructs a new, empty `Cable<T, H>` on the heap with the specified capacity.
@@ -232,7 +239,7 @@ impl<T, H> Cable<T, H> {
     ///
     /// If capacity is 0 or `T` is zero-sized the block will still allocate. Fills the storage with `0` bytes
     #[inline]
-    pub unsafe fn copy_from_raw_parts(header: H, capacity: usize, ptr: *mut T) -> Self {
+    pub unsafe fn from_raw_parts(header: H, capacity: usize, ptr: *mut T) -> Self {
         let mut block = Cable {
             mem: {
                 let layout = Self::BASE_LAYOUT
@@ -247,6 +254,22 @@ impl<T, H> Cable<T, H> {
         block.set_cap(capacity);
         block.set_header(header);
         return block;
+    }
+
+    /// Returns `true` if the block contains no elements.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.cap() == 0
+    }
+
+    /// Fills the storage with `0` bytes. Does not impact header or size
+    #[inline]
+    pub fn zero(&mut self) {
+        // SAFE(within bounds)
+        unsafe {
+            self.as_mut_ptr()
+                .write_bytes(0, mem::size_of::<T>() * self.cap());
+        }
     }
 
     #[inline]
@@ -300,12 +323,6 @@ impl<T, H> Cable<T, H> {
         } else {
             None
         }
-    }
-
-    /// Returns `true` if the block contains no elements.
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.cap() == 0
     }
 
     #[inline]
@@ -369,17 +386,21 @@ impl<T, H> Cable<T, H> {
         if capacity > self.cap() {
             return None;
         }
-        unsafe {
-            let remove = Layout::array::<T>(self.cap() - capacity).ok()?;
-            let ptr = self.as_mut_ptr().add(capacity) as *mut u8;
-            std::alloc::dealloc(ptr, remove);
-            self.set_cap(capacity);
+
+        if let Some((ptr, old_layout)) = self.current_memory() {
+            unsafe {
+                let raw_ptr = std::alloc::realloc(
+                    ptr.as_ptr().cast(),
+                    old_layout,
+                    Self::BASE_LAYOUT.size() + capacity * mem::size_of::<T>(),
+                );
+                self.mem = NonNull::new(raw_ptr as *mut H)?;
+                self.set_cap(capacity);
+            }
         }
-        let layout = Self::BASE_LAYOUT
-            .extend(Layout::array::<T>(capacity).unwrap())
-            .unwrap()
-            .0;
-        Some(layout)
+
+        let removed = Layout::array::<T>(self.cap() - capacity).ok()?;
+        Some(Self::BASE_LAYOUT.extend(removed).ok()?.0)
     }
 
     /// Shrinks or grows the block, ensuring exactly `capacity` elements,
@@ -501,6 +522,11 @@ impl<T, H> Cable<T, H> {
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         self
     }
+
+    #[inline]
+    pub fn as_byte_slice(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.as_ptr().cast(), self.cap() * mem::size_of::<T>()) }
+    }
 }
 
 impl<T, H> ops::Deref for Cable<T, H> {
@@ -591,5 +617,61 @@ impl<T, H> Cable<T, H> {
         let ptr = self.as_mut_ptr().add(index);
         *ptr = value;
         &mut *ptr
+    }
+}
+/*
+impl<T, H> Drop for Cable<T, H> {
+    fn drop(&mut self) {
+        println!("Cable dropped!");
+    }
+}
+*/
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn truncate() {
+        let mut x: crate::Cable<u64> = crate::Cable::with_capacity(9, ());
+        x[0] = 5;
+        x[1] = 8;
+        x[2] = 7;
+        x.truncate(3);
+
+        println!("{:?}", x[0]);
+    }
+
+    #[test]
+    fn reserve() {
+        let mut x: crate::Cable<u64> = crate::Cable::with_capacity(3, ());
+        x[0] = 5;
+        x[1] = 8;
+        x[2] = 7;
+        x.reserve(3, false);
+        x[4] = 1;
+
+        println!("{:?}", x[4]);
+    }
+
+    #[test]
+    fn resize() {
+        let mut x: crate::Cable<u64> = crate::Cable::with_capacity(3, ());
+        x[0] = 5;
+        x[1] = 8;
+        x[2] = 7;
+        x.resize(5);
+        x[4] = 1;
+
+        println!("{:?}", x[4]);
+    }
+
+    #[test]
+    fn into_boxed_slice() {
+        let mut x: crate::Cable<u64> = crate::Cable::with_capacity(5, ());
+        x[0] = 5;
+        x[1] = 8;
+        x[2] = 7;
+        x[4] = 1;
+        let slice = x.into_boxed_slice().unwrap();
+
+        println!("{:?}", slice[1]);
     }
 }
